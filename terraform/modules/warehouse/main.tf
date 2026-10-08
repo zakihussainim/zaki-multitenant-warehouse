@@ -16,10 +16,17 @@ data "aws_vpc" "default" {
   default = true
 }
 
+# Only subnets in availability zones that Redshift supports. In London the default VPC has a subnet in euw2-az4 (eu-west-2d),
+# which Redshift Serverless rejects, so zones are chosen by ID.
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
+  }
+
+  filter {
+    name   = "availability-zone-id"
+    values = var.availability_zone_ids
   }
 }
 
@@ -114,8 +121,8 @@ resource "aws_redshiftserverless_workgroup" "this" {
 
   lifecycle {
     precondition {
-      condition     = length(data.aws_subnets.default.ids) >= 3
-      error_message = "Redshift Serverless needs subnets in at least 3 availability zones. The default VPC in this region has fewer; create the subnets or use a different VPC."
+      condition     = length(data.aws_subnets.default.ids) >= 2
+      error_message = "Redshift Serverless needs subnets in at least 2 supported availability zones. The default VPC has fewer; check var.availability_zone_ids or use a different VPC."
     }
 
     # The queue (WLM) configuration is applied by `python -m mtw queues`, because AWS does not allow it to be switched off again.

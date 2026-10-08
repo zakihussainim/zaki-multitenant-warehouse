@@ -25,3 +25,9 @@ variable "usage_limit_rpu_hours" {
   type        = number
   default     = 150
 }
+
+variable "availability_zone_ids" {
+  description = "Availability zones (by ID) the warehouse subnets may be in. euw2-az4 (eu-west-2d) is left out because Redshift Serverless does not support it."
+  type        = list(string)
+  default     = ["euw2-az1", "euw2-az2", "euw2-az3"]
+}

@@ -228,10 +228,36 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "secretsmanager:DeleteSecret",
       "secretsmanager:DescribeSecret",
       "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:UpdateSecret",
       "secretsmanager:GetResourcePolicy",
       "secretsmanager:PutResourcePolicy",
+      "secretsmanager:DeleteResourcePolicy",
+      "secretsmanager:RotateSecret",
+      "secretsmanager:CancelRotateSecret",
+      "secretsmanager:ListSecretVersionIds",
     ]
     resources = ["arn:aws:secretsmanager:${local.region}:${local.account_id}:secret:redshift!*"]
+  }
+
+  # The managed admin secret is encrypted with the account's Secrets Manager key. Allowed only when used through Secrets Manager.
+  statement {
+    sid = "UseSecretsManagerKeyForRedshiftSecrets"
+    actions = [
+      "kms:Decrypt",
+      "kms:Encrypt",
+      "kms:GenerateDataKey",
+      "kms:ReEncrypt*",
+      "kms:DescribeKey",
+      "kms:CreateGrant",
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.${local.region}.amazonaws.com"]
+    }
   }
 
   statement {
