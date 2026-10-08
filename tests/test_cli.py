@@ -97,8 +97,4 @@ def test_security_can_be_run_twice():
         assert cli.main(["security"]) == 0
     finally:
         cli._api = original
-<<<<<<< Updated upstream
     assert any(s.startswith("GRANT SELECT") for s in fake.statements)  # still reached the grants
-=======
-    assert any(s.startswith("GRANT SELECT") for s in fake.statements)  # still reached the grants
->>>>>>> Stashed changes

@@ -174,8 +174,4 @@ def test_demo_runs_heavy_and_light_queries_under_their_own_query_groups():
 def test_demo_tells_a_safety_timeout_apart_from_a_queue_rule_abort():
     api = FakeApi(ms=1.0, fail_on={"a.revenue > b.revenue": "ERROR: canceling statement due to statement timeout"})
     result = wlm_demo.run_demo(api, "runaway", names.TENANT_BY_ID["acme"], names.TENANT_BY_ID["hooli"], heavy_workers=1, light_queries=2, warmup_seconds=0.05, log=lambda *a: None)
-<<<<<<< Updated upstream
     assert result["heavy_outcomes"].get("hit_safety_timeout", 0) >= 1 and "aborted" not in result["heavy_outcomes"]
-=======
-    assert result["heavy_outcomes"].get("hit_safety_timeout", 0) >= 1 and "aborted" not in result["heavy_outcomes"]
->>>>>>> Stashed changes

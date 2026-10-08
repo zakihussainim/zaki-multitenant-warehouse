@@ -62,7 +62,22 @@ def test_ci_role_only_reaches_this_projects_resources():
     assert "AdministratorAccess" not in text
 
 
+def committed_files():
+    """Files Git would commit (tracked or not ignored). Local gitignored files such as terraform.tfstate are skipped."""
+    import subprocess
+
+    repo = ROOT.parent
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            cwd=repo, capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+        return [repo / line for line in out if line]
+    except (OSError, subprocess.CalledProcessError):
+        return [p for p in ROOT.rglob("*") if ".terraform" not in p.parts]
+
+
 def test_nothing_secret_is_committed():
-    for path in ROOT.rglob("*"):
+    for path in committed_files():
         assert path.name not in ("backend.hcl", "terraform.tfvars")
         assert not path.name.endswith(".tfstate")
