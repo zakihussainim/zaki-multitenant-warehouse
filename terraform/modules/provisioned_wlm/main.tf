@@ -44,6 +44,6 @@ resource "aws_redshift_cluster" "this" {
 
   publicly_accessible                 = false
   encrypted                           = true
-  automated_snapshot_retention_period = 0
+  automated_snapshot_retention_period = 1
   skip_final_snapshot                 = true
 }
