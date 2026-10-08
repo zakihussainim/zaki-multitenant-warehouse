@@ -6,7 +6,7 @@ unloaded; never unload over files that already exist.
 
 import re
 
-from . import datagen, ddl, names
+from . import datagen, ddl, names, security
 
 MONTH = re.compile(r"order_month=(\d{4}-\d{2})/")
 
@@ -75,6 +75,8 @@ def run_offload(api, s3, env, bucket, end_date, months=12, dry_run=False, log=pr
         api.execute(f"ANALYZE {names.CORE}.fact_orders")
         log("deleted the old rows from the warehouse")
     api.execute(ddl.serving_view(include_cold=True))
+    for statement in security.spectrum_usage():
+        api.execute_quiet(statement, ignore=("does not exist",))  # roles only exist once `security` has run
     for statement in ddl.refresh_materialized_views():
         api.execute(statement)
     summary.update(rows_moved=hot_old, months=found)

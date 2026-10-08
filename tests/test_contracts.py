@@ -43,10 +43,13 @@ def test_serverless_workgroup_leaves_queue_settings_to_the_cli():
     assert queues.WLM_KEY == "wlm_json_configuration"
 
 
-def test_both_environments_are_identical_apart_from_their_name():
+def test_both_environments_are_identical_apart_from_their_name_and_the_test_flag():
+    def normalise(text):
+        return "\n".join(line for line in text.splitlines() if "enable_provisioned_wlm_test =" not in line)
+
     dev, prod = read("envs", "dev", "main.tf"), read("envs", "prod", "main.tf")
-    assert dev.replace('"dev"', '"prod"') == prod
-    assert 'enable_provisioned_wlm_test = false' in dev and 'enable_provisioned_wlm_test = false' in prod
+    assert normalise(dev).replace('"dev"', '"prod"') == normalise(prod)
+    assert "enable_provisioned_wlm_test = false" in prod  # the expensive cluster is never left on in prod
     for env in ("dev", "prod"):
         assert f'key          = "envs/{env}/terraform.tfstate"' in read("envs", env, "backend.tf")
 

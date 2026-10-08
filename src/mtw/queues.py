@@ -10,9 +10,21 @@ import time
 
 from . import names
 
-# runtime cap in seconds by tier, and a ceiling on rows returned to the client
+# runtime cap in seconds by tier, and a point at which a very large scan is logged
 TIER_LIMITS = {"large": 120, "medium": 60, "small": 30}
-RETURN_ROW_LIMIT = 1_000_000
+SCAN_ROW_LIMIT = 1_000_000_000
+
+# The only metric names Redshift Serverless accepts in a queue rule (AWS rejects anything else when the configuration is applied).
+VALID_METRICS = (
+    "query_execution_time",
+    "query_queue_time",
+    "join_row_count",
+    "nested_loop_join_row_count",
+    "query_temp_blocks_to_disk",
+    "query_blocks_read",
+    "estimated_query_execution_time",
+    "scan_row_count",
+)
 NESTED_LOOP_ROW_LIMIT = 100_000_000  # catches accidental cross joins long before they hurt anyone
 MAX_RULES_TOTAL = 25  # Serverless limit, across all queues
 MAX_QUEUES = 8
@@ -42,8 +54,8 @@ def serverless_queues(tenants=names.TENANTS):
                         "action": "abort",
                     },
                     {
-                        "rule_name": f"{tenant.id}_bigresult",
-                        "predicate": [{"metric_name": "return_row_count", "operator": ">", "value": RETURN_ROW_LIMIT}],
+                        "rule_name": f"{tenant.id}_bigscan",
+                        "predicate": [{"metric_name": "scan_row_count", "operator": ">", "value": SCAN_ROW_LIMIT}],
                         "action": "log",
                     },
                 ],
@@ -65,6 +77,9 @@ def validate_serverless(queues):
         for r in q["rules"]:
             if len(r["predicate"]) > 3:
                 problems.append(f"{r['rule_name']} has more than 3 predicates")
+            for predicate in r["predicate"]:
+                if predicate["metric_name"] not in VALID_METRICS:
+                    problems.append(f"{r['rule_name']} uses an unknown metric: {predicate['metric_name']}")
     if len(json.dumps(queues, separators=(",", ":"))) > MAX_PARAMETER_BYTES:
         problems.append("configuration is larger than 8000 characters")
     return problems
@@ -78,9 +93,19 @@ def serverless_parameter(tenants=names.TENANTS):
     return {"parameterKey": WLM_KEY, "parameterValue": json.dumps(queues, separators=(",", ":"))}
 
 
+# Workgroup-wide limits such as max_query_execution_time. AWS refuses them alongside wlm_json_configuration:
+# the same limits must be written as rules inside the queue configuration instead (ours are).
+QUERY_LIMIT_PREFIX = "max_"
+
+
 def merged_parameters(existing, new):
-    """update_workgroup replaces the whole list, so keep everything that was already set except the key we change."""
-    kept = [{"parameterKey": p["parameterKey"], "parameterValue": p["parameterValue"]} for p in existing if p["parameterKey"] != new["parameterKey"]]
+    """update_workgroup replaces the whole list, so keep everything that was already set except the key we change
+    and the individual query limits, which cannot be combined with queue configuration."""
+    kept = [
+        {"parameterKey": p["parameterKey"], "parameterValue": p["parameterValue"]}
+        for p in existing
+        if p["parameterKey"] != new["parameterKey"] and not p["parameterKey"].startswith(QUERY_LIMIT_PREFIX)
+    ]
     return kept + [new]
 
 

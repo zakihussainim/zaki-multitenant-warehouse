@@ -49,10 +49,19 @@ def protect(objects, tenants=names.TENANTS):
     return statements
 
 
+def spectrum_usage(tenants=names.TENANTS):
+    """Same reason as for core (see grants): the view that unions cold data is checked against the caller's schema access."""
+    return [f"GRANT USAGE ON SCHEMA {names.SPECTRUM} TO ROLE {tenant.role}" for tenant in tenants]
+
+
 def grants(objects, tenants=names.TENANTS):
+    """What tenants may do. Besides SELECT on the serving objects, they get USAGE (and only USAGE) on schema core.
+    Redshift checks schema access for the person running a late-binding view, even though table access is checked
+    for the view's owner. USAGE alone lets a tenant see that the schema exists; without SELECT on any table in it they can read nothing there."""
     statements = []
     for tenant in tenants:
         statements.append(f"GRANT USAGE ON SCHEMA {names.SERVING} TO ROLE {tenant.role}")
+        statements.append(f"GRANT USAGE ON SCHEMA {names.CORE} TO ROLE {tenant.role}")
         for obj in objects:
             statements.append(f"GRANT SELECT ON {obj} TO ROLE {tenant.role}")
     return statements
