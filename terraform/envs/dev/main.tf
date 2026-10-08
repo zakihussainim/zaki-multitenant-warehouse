@@ -3,7 +3,7 @@ locals {
 
   # Flip to true and merge to create the single provisioned cluster used for the classic-WLM test.
   # Flip back to false and merge to destroy it. It bills by the hour while it exists (roughly 40 to 50 pence an hour; check the pricing page for your node type).
-  enable_provisioned_wlm_test = true
+  enable_provisioned_wlm_test = false
 }
 
 module "storage" {
