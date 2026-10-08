@@ -28,11 +28,15 @@ def _bucket(args):
     return names.bucket_name(args.env, _account_id())
 
 
-def _run_all(api, statements, label):
+def _run_all(api, statements, label, ignore=()):
+    """Runs each statement. A failure whose message contains a phrase in `ignore` counts as already done."""
     for statement in statements:
         first_line = statement.strip().splitlines()[0][:90]
         print(f"  {label}: {first_line}")
-        api.execute(statement)
+        if ignore:
+            api.execute_quiet(statement, ignore=ignore)
+        else:
+            api.execute(statement)
 
 
 def cmd_generate(args):
@@ -53,6 +57,26 @@ def cmd_upload(args):
         s3.upload_file(str(path), bucket, f"raw/{table}/{path.name}")
         count += 1
     print(f"uploaded {count} file(s) to s3://{bucket}/raw/")
+
+
+def cmd_sql(args):
+    """Runs statements one by one and prints the rows. With --as-user the first statement impersonates that user."""
+    api = _api(args)
+    statements = list(args.statements)
+    if args.as_user:
+        names.check_identifier(args.as_user)
+        statements.insert(0, f"SET SESSION AUTHORIZATION {args.as_user}")
+    try:
+        results = api.timed_batch(statements)
+    except datapi.SqlError as error:
+        print(f"ERROR: {str(error).splitlines()[0]}")
+        return 1
+    for entry in results:
+        if entry["rows"]:
+            print(f"-- {entry['sql'][:100]}")
+            for row in entry["rows"][:50]:
+                print(json.dumps(row, default=str))
+    return 0
 
 
 def cmd_schema(args):
@@ -88,7 +112,7 @@ def cmd_security(args):
         api.execute_quiet(statement, ignore)
     _run_all(api, security.lock_down(), "lock down")
     objects = ddl.serving_objects()
-    _run_all(api, security.protect(objects), "protect")
+    _run_all(api, security.protect(objects), "protect", ignore=("already attached",))
     _run_all(api, security.grants(objects), "grant")
     print("done; now run verify-security")
 
@@ -210,6 +234,10 @@ def build_parser():
     p = add("upload", cmd_upload, "copy the generated files to the S3 bucket", warehouse=False)
     p.add_argument("--out", default="data")
 
+    p = add("sql", cmd_sql, "run one or more SQL statements and print the rows")
+    p.add_argument("statements", nargs="+")
+    p.add_argument("--as-user", help="impersonate this database user (SET SESSION AUTHORIZATION) before the statements")
+
     add("schema", cmd_schema, "create schemas and the baseline and tuned tables")
     add("load", cmd_load, "COPY the data into both table variants")
 
@@ -249,7 +277,7 @@ def build_parser():
     p.add_argument("--scenario", default="concurrent", choices=("concurrent", "runaway"))
     p.add_argument("--heavy", default="acme", choices=sorted(names.TENANT_BY_ID))
     p.add_argument("--light", default="hooli", choices=sorted(names.TENANT_BY_ID))
-    p.add_argument("--workers", type=int, default=6)
+    p.add_argument("--workers", type=int, default=3)
     p.add_argument("--label", required=True)
     p.add_argument("--results", default="results")
     return parser

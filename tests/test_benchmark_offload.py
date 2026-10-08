@@ -167,4 +167,11 @@ def test_demo_runs_heavy_and_light_queries_under_their_own_query_groups():
     assert result["heavy_outcomes"].get("aborted", 0) >= 1
     groups = [s for s in api.statements if s.startswith("SET query_group")]
     assert "SET query_group TO 'tenant_acme'" in groups and "SET query_group TO 'tenant_hooli'" in groups
+    assert any(s == "SET statement_timeout TO 240000" for s in api.statements)
     expect_error(wlm_demo.run_demo, api, "other", names.TENANTS[0], names.TENANTS[1], exception=ValueError)
+
+
+def test_demo_tells_a_safety_timeout_apart_from_a_queue_rule_abort():
+    api = FakeApi(ms=1.0, fail_on={"a.revenue > b.revenue": "ERROR: canceling statement due to statement timeout"})
+    result = wlm_demo.run_demo(api, "runaway", names.TENANT_BY_ID["acme"], names.TENANT_BY_ID["hooli"], heavy_workers=1, light_queries=2, warmup_seconds=0.05, log=lambda *a: None)
+    assert result["heavy_outcomes"].get("hit_safety_timeout", 0) >= 1 and "aborted" not in result["heavy_outcomes"]

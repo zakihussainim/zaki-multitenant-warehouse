@@ -65,6 +65,22 @@ def test_merge_keeps_other_parameters_and_replaces_ours():
     assert merged == [{"parameterKey": "datestyle", "parameterValue": "ISO"}, {"parameterKey": queues.WLM_KEY, "parameterValue": "[1]"}]
 
 
+def test_every_rule_uses_a_metric_aws_accepts():
+    for queue in queues.serverless_queues():
+        for rule in queue["rules"]:
+            for predicate in rule["predicate"]:
+                assert predicate["metric_name"] in queues.VALID_METRICS
+    config = queues.serverless_queues()
+    config[0]["rules"][0]["predicate"][0]["metric_name"] = "return_row_count"
+    assert any("unknown metric" in problem for problem in queues.validate_serverless(config))
+
+
+def test_merge_drops_individual_query_limits_which_aws_refuses_beside_queues():
+    existing = [{"parameterKey": "max_query_execution_time", "parameterValue": "14400"}, {"parameterKey": "search_path", "parameterValue": "x"}]
+    merged = queues.merged_parameters(existing, {"parameterKey": queues.WLM_KEY, "parameterValue": "[1]"})
+    assert [p["parameterKey"] for p in merged] == ["search_path", queues.WLM_KEY]
+
+
 def test_apply_serverless_updates_then_waits_for_available():
     client = FakeServerless(existing=[{"parameterKey": "datestyle", "parameterValue": "ISO"}])
     sleeps = []

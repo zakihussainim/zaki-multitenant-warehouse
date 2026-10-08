@@ -20,6 +20,7 @@ def test_every_command_parses():
         ["offload", "--dry-run"],
         ["footprint"],
         ["wlm-demo", "--label", "x", "--scenario", "runaway"],
+        ["sql", "SELECT 1", "SELECT 2", "--as-user", "tenant_acme"],
     ):
         args = parser.parse_args(argv)
         assert callable(args.func), argv
@@ -73,3 +74,27 @@ def test_security_command_orders_setup_protect_grant():
     first_grant = next(i for i, s in enumerate(text) if s.startswith("GRANT SELECT"))
     assert first_attach < last_enable < first_grant
     assert text.index("REVOKE ALL ON SCHEMA core FROM PUBLIC") < first_attach
+
+
+def test_sql_command_impersonates_and_reports_errors():
+    fake = FakeApi(batch_rows={"SELECT 1": [{"n": 1}]})
+    original = cli._api
+    cli._api = lambda args: fake
+    try:
+        assert cli.main(["sql", "SELECT 1", "--as-user", "tenant_acme"]) == 0
+        assert fake.statements[0] == "SET SESSION AUTHORIZATION tenant_acme"
+        fake.fail_on = {"SELECT 2": "permission denied for schema core"}
+        assert cli.main(["sql", "SELECT 2"]) == 1
+    finally:
+        cli._api = original
+
+
+def test_security_can_be_run_twice():
+    fake = FakeApi(fail_on={"ATTACH RLS POLICY": "rls policy \"policy_acme\" is already attached on relation \"orders\" to role \"role_acme\""})
+    original = cli._api
+    cli._api = lambda args: fake
+    try:
+        assert cli.main(["security"]) == 0
+    finally:
+        cli._api = original
+    assert any(s.startswith("GRANT SELECT") for s in fake.statements)  # still reached the grants

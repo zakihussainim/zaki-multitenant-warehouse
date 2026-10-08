@@ -92,10 +92,17 @@ def test_protect_attaches_before_enabling_and_never_grants():
 
 def test_grants_cover_each_tenant_on_each_serving_object_only():
     statements = security.grants(ddl.serving_objects())
-    assert len(statements) == len(names.TENANTS) * (1 + 4)
-    assert not any("core." in s for s in statements)
+    assert len(statements) == len(names.TENANTS) * (2 + 4)
+    assert not any(s.startswith("GRANT SELECT") and " core." in s for s in statements)  # never SELECT on a core table
     assert not any("PUBLIC" in s for s in statements)
     assert "GRANT SELECT ON serving.orders TO ROLE role_hooli" in statements
+    # the late-binding view is checked against the caller's schema access, so tenants need USAGE (only) on core
+    assert "GRANT USAGE ON SCHEMA core TO ROLE role_hooli" in statements
+
+
+def test_spectrum_usage_grants_usage_only():
+    statements = security.spectrum_usage()
+    assert len(statements) == len(names.TENANTS) and all(s.startswith("GRANT USAGE ON SCHEMA spectrum") for s in statements)
 
 
 def test_lock_down_removes_public_access_to_core():
